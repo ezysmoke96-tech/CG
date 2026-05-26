@@ -9,28 +9,18 @@ ACCENT = discord.Color.from_rgb(88, 101, 242)
 class AddMedalModal(discord.ui.Modal, title="Add Medal"):
     medal_name = discord.ui.TextInput(label="Medal Name", placeholder="e.g. Medal of Valor", max_length=64)
     medal_description = discord.ui.TextInput(label="Description", placeholder="What this medal is awarded for", style=discord.TextStyle.paragraph, max_length=256)
-    medal_emoji = discord.ui.TextInput(label="Icon (optional)", placeholder="e.g. Gold Star", required=False, max_length=8)
 
     async def on_submit(self, interaction: discord.Interaction):
         medals = storage.get_medals()
         key = self.medal_name.value.lower().replace(" ", "_")
-        medals[key] = {
-            "name": self.medal_name.value,
-            "description": self.medal_description.value,
-            "emoji": self.medal_emoji.value or "—",
-        }
+        medals[key] = {"name": self.medal_name.value, "description": self.medal_description.value}
         storage.save_medals(medals)
-        await interaction.response.send_message(
-            f"Medal **{self.medal_name.value}** has been added.", ephemeral=True
-        )
+        await interaction.response.send_message(f"Medal **{self.medal_name.value}** has been added.", ephemeral=True)
 
 
 class RemoveMedalSelect(discord.ui.Select):
     def __init__(self, medals: dict):
-        options = [
-            discord.SelectOption(label=v["name"], value=k)
-            for k, v in medals.items()
-        ]
+        options = [discord.SelectOption(label=v["name"], value=k) for k, v in medals.items()]
         super().__init__(placeholder="Select a medal to remove…", options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
@@ -43,8 +33,7 @@ class RemoveMedalSelect(discord.ui.Select):
 
 async def _set_channel_flow(interaction: discord.Interaction, label: str, key: str):
     await interaction.response.send_message(
-        f"Mention the channel to use as the **{label}** channel.\nType `cancel` to skip.",
-        ephemeral=True,
+        f"Mention the channel to use as the **{label}** channel.\nType `cancel` to skip.", ephemeral=True
     )
 
     def check(m):
@@ -118,11 +107,11 @@ def build_setup_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
             return c.mention if c else f"<#{cid}>"
         return "Not configured"
 
-    embed.add_field(name="Welcome Channel", value=ch("welcome_channel"), inline=True)
-    embed.add_field(name="Mod Log Channel", value=ch("mod_log_channel"), inline=True)
-    embed.add_field(name="Chat Log Channel", value=ch("chat_log_channel"), inline=True)
-    embed.add_field(name="Event Log Channel", value=ch("event_log_channel"), inline=True)
-    embed.add_field(name="CG Comms Channel", value=ch("cg_comms_channel"), inline=True)
+    embed.add_field(name="Welcome Channel",    value=ch("welcome_channel"),   inline=True)
+    embed.add_field(name="Mod Log Channel",    value=ch("mod_log_channel"),   inline=True)
+    embed.add_field(name="Chat Log Channel",   value=ch("chat_log_channel"),  inline=True)
+    embed.add_field(name="Event Log Channel",  value=ch("event_log_channel"), inline=True)
+    embed.add_field(name="CG Comms Channel",   value=ch("cg_comms_channel"),  inline=True)
 
     medals = storage.get_medals()
     medal_list = "\n".join(f"**{v['name']}** — {v['description']}" for v in medals.values()) or "None configured"
@@ -154,8 +143,7 @@ class SetupCog(commands.Cog):
     async def medals(self, interaction: discord.Interaction):
         medals = storage.get_medals()
         if not medals:
-            embed = discord.Embed(description="No medals have been configured yet. Use `/setup` to add some.", color=ACCENT)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("No medals configured yet. Use `/setup` to add some.", ephemeral=True)
             return
         embed = discord.Embed(title="Medals", color=ACCENT)
         for v in medals.values():
@@ -168,20 +156,17 @@ class SetupCog(commands.Cog):
     async def assignmedal(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         medals = storage.get_medals()
         if not medals:
-            await interaction.response.send_message("No medals configured. Use `/setup` to add medals first.", ephemeral=True)
+            await interaction.response.send_message("No medals configured. Use `/setup` first.", ephemeral=True)
             return
 
-        options = [
-            discord.SelectOption(label=v["name"], value=k)
-            for k, v in medals.items()
-        ]
+        options = [discord.SelectOption(label=v["name"], value=k) for k, v in medals.items()]
 
         class MedalSelect(discord.ui.Select):
             def __init__(self_inner):
                 super().__init__(placeholder="Choose a medal to award…", options=options[:25])
 
             async def callback(self_inner, inter: discord.Interaction):
-                key = self_inner.values[0]
+                key   = self_inner.values[0]
                 medal = medals[key]
                 awarded = storage.get_awarded_medals()
                 uid = str(user.id)
@@ -189,13 +174,12 @@ class SetupCog(commands.Cog):
                     awarded[uid] = []
                 awarded[uid].append({"medal": key, "reason": reason, "awarded_by": inter.user.id})
                 storage.save_awarded_medals(awarded)
-
                 embed = discord.Embed(
                     title="Medal Awarded",
                     description=f"**{medal['name']}** has been awarded to {user.mention}.",
                     color=ACCENT,
                 )
-                embed.add_field(name="Reason", value=reason)
+                embed.add_field(name="Reason",     value=reason)
                 embed.add_field(name="Awarded by", value=inter.user.mention)
                 await inter.response.edit_message(embed=embed, view=None)
                 await inter.channel.send(embed=embed)

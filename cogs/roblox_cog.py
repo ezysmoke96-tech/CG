@@ -21,12 +21,12 @@ MIN_FOLLOWING = 10
 MIN_AGE_DAYS  = 365
 
 
-async def roblox_get(session: aiohttp.ClientSession, url: str) -> dict:
+async def roblox_get(session, url):
     async with session.get(url, headers=HEADERS) as r:
         return await r.json()
 
 
-async def get_user_by_name(session, username: str):
+async def get_user_by_name(session, username):
     async with session.post(
         "https://users.roblox.com/v1/usernames/users",
         json={"usernames": [username], "excludeBannedUsers": False},
@@ -36,33 +36,8 @@ async def get_user_by_name(session, username: str):
         return data["data"][0] if data.get("data") else None
 
 
-async def get_user_info(session, user_id: int) -> dict:
-    return await roblox_get(session, f"https://users.roblox.com/v1/users/{user_id}")
-
-
-async def get_user_groups(session, user_id: int) -> list:
-    data = await roblox_get(session, f"https://groups.roblox.com/v1/users/{user_id}/groups/roles")
-    return data.get("data", [])
-
-
-async def get_friends_count(session, user_id: int) -> int:
-    data = await roblox_get(session, f"https://friends.roblox.com/v1/users/{user_id}/friends/count")
-    return data.get("count", 0)
-
-
-async def get_followers_count(session, user_id: int) -> int:
-    data = await roblox_get(session, f"https://friends.roblox.com/v1/users/{user_id}/followers/count")
-    return data.get("count", 0)
-
-
-async def get_following_count(session, user_id: int) -> int:
-    data = await roblox_get(session, f"https://friends.roblox.com/v1/users/{user_id}/followings/count")
-    return data.get("count", 0)
-
-
-async def get_badge_count(session, user_id: int) -> int:
-    total = 0
-    cursor = ""
+async def get_badge_count(session, user_id):
+    total, cursor = 0, ""
     for _ in range(10):
         url = f"https://badges.roblox.com/v1/users/{user_id}/badges?limit=100&sortOrder=Asc"
         if cursor:
@@ -75,9 +50,8 @@ async def get_badge_count(session, user_id: int) -> int:
     return total
 
 
-async def get_gamepass_count(session, user_id: int) -> int:
-    total = 0
-    cursor = ""
+async def get_gamepass_count(session, user_id):
+    total, cursor = 0, ""
     for _ in range(20):
         url = f"https://inventory.roblox.com/v1/users/{user_id}/assets/gamepasses?limit=100"
         if cursor:
@@ -90,7 +64,7 @@ async def get_gamepass_count(session, user_id: int) -> int:
     return total
 
 
-async def get_group_name(session, group_id: str) -> str:
+async def get_group_name(session, group_id):
     try:
         data = await roblox_get(session, f"https://groups.roblox.com/v1/groups/{group_id}")
         return data.get("name", f"Group {group_id}")
@@ -110,49 +84,47 @@ class RobloxCog(commands.Cog):
         async with aiohttp.ClientSession() as session:
             user_data = await get_user_by_name(session, roblox_user)
             if not user_data:
-                embed = discord.Embed(
-                    title="Background Check",
-                    description=f"No Roblox account found for **{roblox_user}**.",
-                    color=discord.Color.from_rgb(220, 53, 69),
+                await interaction.followup.send(
+                    embed=discord.Embed(
+                        title="Background Check",
+                        description=f"No Roblox account found for **{roblox_user}**.",
+                        color=discord.Color.from_rgb(220, 53, 69),
+                    )
                 )
-                await interaction.followup.send(embed=embed)
                 return
 
             user_id = user_data["id"]
-
-            info       = await get_user_info(session, user_id)
-            groups     = await get_user_groups(session, user_id)
+            info       = await roblox_get(session, f"https://users.roblox.com/v1/users/{user_id}")
+            groups_raw = await roblox_get(session, f"https://groups.roblox.com/v1/users/{user_id}/groups/roles")
+            friends    = (await roblox_get(session, f"https://friends.roblox.com/v1/users/{user_id}/friends/count")).get("count", 0)
+            followers  = (await roblox_get(session, f"https://friends.roblox.com/v1/users/{user_id}/followers/count")).get("count", 0)
+            following  = (await roblox_get(session, f"https://friends.roblox.com/v1/users/{user_id}/followings/count")).get("count", 0)
             badges     = await get_badge_count(session, user_id)
-            friends    = await get_friends_count(session, user_id)
-            followers  = await get_followers_count(session, user_id)
-            following  = await get_following_count(session, user_id)
             gamepasses = await get_gamepass_count(session, user_id)
 
+            groups = groups_raw.get("data", [])
             user_group_map = {str(g["group"]["id"]): g for g in groups}
 
             created_raw = info.get("created", "")
             if created_raw:
-                created_dt = datetime.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
-                age_days   = (datetime.datetime.now(datetime.timezone.utc) - created_dt).days
+                created_dt  = datetime.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+                age_days    = (datetime.datetime.now(datetime.timezone.utc) - created_dt).days
                 created_str = created_dt.strftime("%B %d, %Y")
                 age_str     = f"{age_days} days"
             else:
-                age_days    = 0
-                created_str = "Unknown"
-                age_str     = "Unknown"
+                age_days, created_str, age_str = 0, "Unknown", "Unknown"
 
             banned       = info.get("isBanned", False)
             username     = info.get("name", roblox_user)
             display_name = info.get("displayName", roblox_user)
             description  = info.get("description", "").strip() or "None"
 
-            pass_badges   = badges    >= MIN_BADGES
-            pass_friends  = friends   >= MIN_FRIENDS
+            pass_badges    = badges    >= MIN_BADGES
+            pass_friends   = friends   >= MIN_FRIENDS
             pass_following = following >= MIN_FOLLOWING
-            pass_age      = age_days  >= MIN_AGE_DAYS
-            pass_banned   = not banned
+            pass_age       = age_days  >= MIN_AGE_DAYS
+            overall_pass   = all([pass_badges, pass_friends, pass_following, pass_age, not banned])
 
-            overall_pass = all([pass_badges, pass_friends, pass_following, pass_age, pass_banned])
             color = discord.Color.from_rgb(40, 167, 69) if overall_pass else discord.Color.from_rgb(220, 53, 69)
 
             embed = discord.Embed(
@@ -174,17 +146,20 @@ class RobloxCog(commands.Cog):
                 inline=False,
             )
 
-            stats = "\n".join([
-                f"Badges: **{badges}**",
-                f"Friends: **{friends}**",
-                f"Followers: **{followers}**",
-                f"Following: **{following}**",
-                f"Gamepasses Owned: **{gamepasses}**",
-                f"Account Age: **{age_str}**",
-                f"Account Created: **{created_str}**",
-                f"Total Groups: **{len(groups)}**",
-            ])
-            embed.add_field(name="Statistics", value=stats, inline=False)
+            embed.add_field(
+                name="Statistics",
+                value="\n".join([
+                    f"Badges: **{badges}**",
+                    f"Friends: **{friends}**",
+                    f"Followers: **{followers}**",
+                    f"Following: **{following}**",
+                    f"Gamepasses Owned: **{gamepasses}**",
+                    f"Account Age: **{age_str}**",
+                    f"Account Created: **{created_str}**",
+                    f"Total Groups: **{len(groups)}**",
+                ]),
+                inline=False,
+            )
 
             # Main group
             if MAIN_GROUP_ID and MAIN_GROUP_ID in user_group_map:
@@ -194,28 +169,24 @@ class RobloxCog(commands.Cog):
                 main_value = "-"
             embed.add_field(name="Main Group", value=main_value, inline=False)
 
-            # Allied groups — only show ones the user is actually in
+            # Allied (divisional) groups — only show ones the user is in
             if ALLIED_GROUP_IDS:
-                ally_lines = []
-                for gid in ALLIED_GROUP_IDS:
-                    if gid in user_group_map:
-                        g = user_group_map[gid]
-                        ally_lines.append(f"**{g['group']['name']}** — {g['role']['name']}")
-                ally_value = "\n".join(ally_lines) if ally_lines else "-"
-                embed.add_field(name="Divisional Groups", value=ally_value, inline=False)
+                ally_lines = [
+                    f"**{user_group_map[gid]['group']['name']}** — {user_group_map[gid]['role']['name']}"
+                    for gid in ALLIED_GROUP_IDS if gid in user_group_map
+                ]
+                embed.add_field(name="Divisional Groups", value="\n".join(ally_lines) if ally_lines else "-", inline=False)
 
-            # Enemy groups — only flag ones the user is actually in
+            # Enemy groups — only show ones the user is actually in
             if ENEMY_GROUP_IDS:
-                enemy_lines = []
-                for gid in ENEMY_GROUP_IDS:
-                    if gid in user_group_map:
-                        g = user_group_map[gid]
-                        enemy_lines.append(f"**{g['group']['name']}** — {g['role']['name']}")
+                enemy_lines = [
+                    f"**{user_group_map[gid]['group']['name']}** — {user_group_map[gid]['role']['name']}"
+                    for gid in ENEMY_GROUP_IDS if gid in user_group_map
+                ]
                 if enemy_lines:
                     embed.add_field(name="Enemy Groups Detected", value="\n".join(enemy_lines), inline=False)
 
-            verdict_text = "PASSED" if overall_pass else "FAILED"
-            embed.add_field(name="Verdict", value=verdict_text, inline=False)
+            embed.add_field(name="Verdict", value="PASSED" if overall_pass else "FAILED", inline=False)
             embed.set_footer(text=f"Requested by {interaction.user}")
             await interaction.followup.send(embed=embed)
 
