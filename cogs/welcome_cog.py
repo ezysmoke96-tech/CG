@@ -3,6 +3,15 @@ from discord.ext import commands
 from utils import storage
 
 CORUSCANT_GUARD_GIF = "https://media.tenor.com/w4Z0YGKF-9MAAAAC/coruscant-guard-star-wars.gif"
+ACCENT = discord.Color.from_rgb(88, 101, 242)
+
+
+def ordinal(n: int) -> str:
+    if 11 <= (n % 100) <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
 
 
 class WelcomeCog(commands.Cog):
@@ -22,20 +31,13 @@ class WelcomeCog(commands.Cog):
 
         member_count = member.guild.member_count
 
-        def ordinal(n: int) -> str:
-            if 11 <= (n % 100) <= 13:
-                suffix = "th"
-            else:
-                suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-            return f"{n}{suffix}"
-
         embed = discord.Embed(
-            title=f"Welcome to {member.guild.name}!",
+            title=f"Welcome to {member.guild.name}",
             description=(
                 f"Hello, {member.mention}! Welcome to **{member.guild.name}**.\n"
-                f"You are our **{ordinal(member_count)}** member to join!"
+                f"You are our **{ordinal(member_count)}** member to join."
             ),
-            color=discord.Color.gold(),
+            color=ACCENT,
         )
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.set_image(url=CORUSCANT_GUARD_GIF)

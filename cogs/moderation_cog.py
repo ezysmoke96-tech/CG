@@ -4,6 +4,12 @@ from discord.ext import commands
 from utils import storage
 import datetime
 
+ACCENT = discord.Color.from_rgb(88, 101, 242)
+SUCCESS = discord.Color.from_rgb(40, 167, 69)
+DANGER  = discord.Color.from_rgb(220, 53, 69)
+WARNING = discord.Color.from_rgb(255, 193, 7)
+NEUTRAL = discord.Color.from_rgb(52, 58, 64)
+
 
 async def log_action(bot, action: str, moderator: discord.Member, target, reason: str, extra: str = ""):
     cfg = storage.get_setup()
@@ -14,8 +20,8 @@ async def log_action(bot, action: str, moderator: discord.Member, target, reason
     if not channel:
         return
     embed = discord.Embed(
-        title=f"🛡️ {action}",
-        color=discord.Color.orange(),
+        title=action,
+        color=WARNING,
         timestamp=datetime.datetime.utcnow(),
     )
     embed.add_field(name="Target", value=str(target), inline=True)
@@ -33,49 +39,36 @@ class ModerationCog(commands.Cog):
     @app_commands.command(name="ping", description="Check the bot's latency.")
     async def ping(self, interaction: discord.Interaction):
         latency = round(self.bot.latency * 1000)
-        await interaction.response.send_message(f"🏓 Pong! Latency: **{latency}ms**")
+        embed = discord.Embed(description=f"Latency: **{latency}ms**", color=ACCENT)
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="help", description="View all available commands.")
     async def help(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="📖 Command List", color=discord.Color.blurple())
-
-        embed.add_field(name="⚙️ Setup", value=(
-            "`/setup` — Configure the bot\n"
-            "`/editsetup` — Edit configuration\n"
-            "`/medals` — View all medals\n"
-            "`/assignmedal` — Award a medal to a user"
+        embed = discord.Embed(title="Command Reference", color=ACCENT)
+        embed.add_field(name="Setup", value=(
+            "`/setup`  `/editsetup`  `/medals`  `/assignmedal`"
         ), inline=False)
-
-        embed.add_field(name="📅 Events", value=(
-            "`/host <event> <link>` — Host an event\n"
-            "`/groupsync` — Sync Roblox group roles\n"
-            "`/rankcheck` — Check your Roblox rank"
+        embed.add_field(name="Events", value=(
+            "`/host`  `/groupsync`  `/rankcheck`"
         ), inline=False)
-
-        embed.add_field(name="🔍 Roblox", value=(
-            "`/bgcheck <user>` — Background check a Roblox user\n"
-            "`/aos <user> <reason> <time>` — Arrest On Sight"
+        embed.add_field(name="Roblox", value=(
+            "`/bgcheck`  `/aos`"
         ), inline=False)
-
-        embed.add_field(name="🛡️ Moderation", value=(
-            "`/purge` `/kick` `/ban` `/mute` `/unmute`\n"
-            "`/slowmode` `/role` `/promote` `/demote`\n"
-            "`/loa` `/blacklist` `/unblacklist`\n"
-            "`/announce` `/lockdown` `/unlockdown`\n"
-            "`/strike`"
+        embed.add_field(name="Moderation", value=(
+            "`/purge`  `/kick`  `/ban`  `/mute`  `/unmute`\n"
+            "`/slowmode`  `/role`  `/promote`  `/demote`\n"
+            "`/loa`  `/blacklist`  `/unblacklist`\n"
+            "`/announce`  `/lockdown`  `/unlockdown`  `/strike`"
         ), inline=False)
-
-        embed.add_field(name="🎮 Fun", value=(
-            "`/roll` `/coinflip` `/8ball` `/rate` `/ship`\n"
-            "`/roast` `/compliment` `/meme` `/joke` `/choose`"
+        embed.add_field(name="Fun", value=(
+            "`/roll`  `/coinflip`  `/8ball`  `/rate`  `/ship`\n"
+            "`/roast`  `/compliment`  `/meme`  `/joke`  `/choose`"
         ), inline=False)
-
-        embed.add_field(name="⭐ Star Wars", value=(
-            "`/order66` `/goodsoldiersfolloworders` `/rogerroger`\n"
-            "`/watchthosewristrockets` `/theattemptonmylife`\n"
-            "`/itsatreasonableprice` `/hellothere`"
+        embed.add_field(name="Star Wars", value=(
+            "`/order66`  `/goodsoldiersfolloworders`  `/rogerroger`\n"
+            "`/watchthosewristrockets`  `/theattemptonmylife`\n"
+            "`/itsatreasonableprice`  `/hellothere`"
         ), inline=False)
-
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="purge", description="Delete a number of messages from this channel.")
@@ -84,14 +77,19 @@ class ModerationCog(commands.Cog):
     async def purge(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 100]):
         await interaction.response.defer(ephemeral=True)
         deleted = await interaction.channel.purge(limit=amount)
-        await interaction.followup.send(f"🗑️ Deleted **{len(deleted)}** messages.", ephemeral=True)
+        embed = discord.Embed(description=f"Deleted **{len(deleted)}** messages.", color=SUCCESS)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="kick", description="Kick a member from the server.")
     @app_commands.describe(user="User to kick", reason="Reason for the kick")
     @app_commands.default_permissions(kick_members=True)
     async def kick(self, interaction: discord.Interaction, user: discord.Member, reason: str = "No reason provided"):
         await user.kick(reason=reason)
-        await interaction.response.send_message(f"👢 **{user}** has been kicked. Reason: {reason}")
+        embed = discord.Embed(title="Kick", color=DANGER)
+        embed.add_field(name="User", value=str(user), inline=True)
+        embed.add_field(name="Reason", value=reason, inline=True)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
+        await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Kick", interaction.user, user, reason)
 
     @app_commands.command(name="ban", description="Ban a member from the server.")
@@ -99,7 +97,11 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(ban_members=True)
     async def ban(self, interaction: discord.Interaction, user: discord.Member, reason: str = "No reason provided"):
         await user.ban(reason=reason)
-        await interaction.response.send_message(f"🔨 **{user}** has been banned. Reason: {reason}")
+        embed = discord.Embed(title="Ban", color=DANGER)
+        embed.add_field(name="User", value=str(user), inline=True)
+        embed.add_field(name="Reason", value=reason, inline=True)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
+        await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Ban", interaction.user, user, reason)
 
     @app_commands.command(name="mute", description="Timeout (mute) a member.")
@@ -108,7 +110,11 @@ class ModerationCog(commands.Cog):
     async def mute(self, interaction: discord.Interaction, user: discord.Member, time: int = 10):
         until = discord.utils.utcnow() + datetime.timedelta(minutes=time)
         await user.timeout(until, reason=f"Muted by {interaction.user}")
-        await interaction.response.send_message(f"🔇 **{user}** has been muted for **{time}** minutes.")
+        embed = discord.Embed(title="Mute", color=WARNING)
+        embed.add_field(name="User", value=str(user), inline=True)
+        embed.add_field(name="Duration", value=f"{time} minutes", inline=True)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
+        await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Mute", interaction.user, user, f"Muted for {time} minutes")
 
     @app_commands.command(name="unmute", description="Remove timeout from a member.")
@@ -116,7 +122,9 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(moderate_members=True)
     async def unmute(self, interaction: discord.Interaction, user: discord.Member):
         await user.timeout(None)
-        await interaction.response.send_message(f"🔊 **{user}** has been unmuted.")
+        embed = discord.Embed(title="Unmute", description=f"{user.mention} has been unmuted.", color=SUCCESS)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
+        await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Unmute", interaction.user, user, "Unmuted")
 
     @app_commands.command(name="slowmode", description="Set slowmode for the current channel.")
@@ -124,10 +132,9 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(manage_channels=True)
     async def slowmode(self, interaction: discord.Interaction, seconds: app_commands.Range[int, 0, 21600]):
         await interaction.channel.edit(slowmode_delay=seconds)
-        if seconds == 0:
-            await interaction.response.send_message("⏱️ Slowmode disabled.")
-        else:
-            await interaction.response.send_message(f"⏱️ Slowmode set to **{seconds}** seconds.")
+        msg = "Slowmode disabled." if seconds == 0 else f"Slowmode set to **{seconds}** seconds."
+        embed = discord.Embed(description=msg, color=ACCENT)
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="role", description="Add or remove a role from a user.")
     @app_commands.describe(user="Target user", role="Role to add or remove")
@@ -135,10 +142,17 @@ class ModerationCog(commands.Cog):
     async def role(self, interaction: discord.Interaction, user: discord.Member, role: discord.Role):
         if role in user.roles:
             await user.remove_roles(role)
-            await interaction.response.send_message(f"➖ Removed **{role.name}** from {user.mention}.")
+            action = "removed from"
         else:
             await user.add_roles(role)
-            await interaction.response.send_message(f"➕ Added **{role.name}** to {user.mention}.")
+            action = "added to"
+        embed = discord.Embed(
+            title="Role Update",
+            description=f"**{role.name}** {action} {user.mention}.",
+            color=ACCENT,
+        )
+        embed.set_footer(text=f"Actioned by {interaction.user}")
+        await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Role Update", interaction.user, user, f"Role: {role.name}")
 
     @app_commands.command(name="promote", description="Promote a user to a specific rank/role.")
@@ -146,12 +160,10 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(manage_roles=True)
     async def promote(self, interaction: discord.Interaction, user: discord.Member, rank: discord.Role):
         await user.add_roles(rank)
-        embed = discord.Embed(
-            title="⬆️ Promotion",
-            description=f"{user.mention} has been promoted to **{rank.name}**!",
-            color=discord.Color.green(),
-        )
-        embed.set_footer(text=f"Promoted by {interaction.user}")
+        embed = discord.Embed(title="Promotion", color=SUCCESS)
+        embed.add_field(name="User", value=user.mention, inline=True)
+        embed.add_field(name="New Rank", value=rank.name, inline=True)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
         await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Promotion", interaction.user, user, f"Promoted to {rank.name}")
 
@@ -160,12 +172,10 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(manage_roles=True)
     async def demote(self, interaction: discord.Interaction, user: discord.Member, rank: discord.Role):
         await user.remove_roles(rank)
-        embed = discord.Embed(
-            title="⬇️ Demotion",
-            description=f"{user.mention} has been demoted from **{rank.name}**.",
-            color=discord.Color.red(),
-        )
-        embed.set_footer(text=f"Demoted by {interaction.user}")
+        embed = discord.Embed(title="Demotion", color=DANGER)
+        embed.add_field(name="User", value=user.mention, inline=True)
+        embed.add_field(name="Removed Rank", value=rank.name, inline=True)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
         await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Demotion", interaction.user, user, f"Demoted from {rank.name}")
 
@@ -178,11 +188,10 @@ class ModerationCog(commands.Cog):
         end_date = (datetime.datetime.utcnow() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
         loa_data[uid] = {"days": days, "end_date": end_date, "approved_by": interaction.user.id}
         storage.save_loa(loa_data)
-        embed = discord.Embed(
-            title="🌴 Leave of Absence",
-            description=f"{user.mention} is on LOA for **{days} days** (until {end_date}).",
-            color=discord.Color.yellow(),
-        )
+        embed = discord.Embed(title="Leave of Absence", color=WARNING)
+        embed.add_field(name="User", value=user.mention, inline=True)
+        embed.add_field(name="Duration", value=f"{days} days", inline=True)
+        embed.add_field(name="Returns", value=end_date, inline=True)
         embed.set_footer(text=f"Approved by {interaction.user}")
         await interaction.response.send_message(embed=embed)
 
@@ -193,12 +202,10 @@ class ModerationCog(commands.Cog):
         bl = storage.get_blacklist()
         bl[str(user.id)] = {"reason": reason, "by": interaction.user.id, "username": str(user)}
         storage.save_blacklist(bl)
-        embed = discord.Embed(
-            title="🚫 Blacklisted",
-            description=f"{user.mention} has been blacklisted.",
-            color=discord.Color.dark_red(),
-        )
-        embed.add_field(name="Reason", value=reason)
+        embed = discord.Embed(title="Blacklist", color=DANGER)
+        embed.add_field(name="User", value=user.mention, inline=True)
+        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
         await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Blacklist", interaction.user, user, reason)
 
@@ -208,11 +215,14 @@ class ModerationCog(commands.Cog):
     async def unblacklist(self, interaction: discord.Interaction, user: discord.Member):
         bl = storage.get_blacklist()
         if str(user.id) not in bl:
-            await interaction.response.send_message(f"**{user}** is not on the blacklist.", ephemeral=True)
+            embed = discord.Embed(description=f"**{user}** is not on the blacklist.", color=NEUTRAL)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         bl.pop(str(user.id))
         storage.save_blacklist(bl)
-        await interaction.response.send_message(f"✅ **{user}** has been removed from the blacklist.")
+        embed = discord.Embed(title="Unblacklist", description=f"{user.mention} has been removed from the blacklist.", color=SUCCESS)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
+        await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Unblacklist", interaction.user, user, "Removed from blacklist")
 
     @app_commands.command(name="announce", description="Send an announcement embed.")
@@ -220,14 +230,14 @@ class ModerationCog(commands.Cog):
     @app_commands.default_permissions(manage_messages=True)
     async def announce(self, interaction: discord.Interaction, message: str):
         embed = discord.Embed(
-            title="📢 Announcement",
+            title="Announcement",
             description=message,
-            color=discord.Color.blue(),
+            color=ACCENT,
             timestamp=datetime.datetime.utcnow(),
         )
-        embed.set_footer(text=f"Announced by {interaction.user}")
+        embed.set_footer(text=f"Posted by {interaction.user}")
         await interaction.channel.send(embed=embed)
-        await interaction.response.send_message("✅ Announcement sent.", ephemeral=True)
+        await interaction.response.send_message("Announcement sent.", ephemeral=True)
 
     @app_commands.command(name="lockdown", description="Lock the current channel.")
     @app_commands.describe(reason="Reason for the lockdown")
@@ -236,11 +246,8 @@ class ModerationCog(commands.Cog):
         overwrite = interaction.channel.overwrites_for(interaction.guild.default_role)
         overwrite.send_messages = False
         await interaction.channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-        embed = discord.Embed(
-            title="🔒 Channel Locked",
-            description=f"This channel has been locked.\nReason: {reason}",
-            color=discord.Color.red(),
-        )
+        embed = discord.Embed(title="Channel Locked", description=f"Reason: {reason}", color=DANGER)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
         await interaction.response.send_message(embed=embed)
         await log_action(self.bot, "Lockdown", interaction.user, interaction.channel, reason)
 
@@ -250,11 +257,8 @@ class ModerationCog(commands.Cog):
         overwrite = interaction.channel.overwrites_for(interaction.guild.default_role)
         overwrite.send_messages = None
         await interaction.channel.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-        embed = discord.Embed(
-            title="🔓 Channel Unlocked",
-            description="This channel has been unlocked.",
-            color=discord.Color.green(),
-        )
+        embed = discord.Embed(title="Channel Unlocked", description="This channel has been unlocked.", color=SUCCESS)
+        embed.set_footer(text=f"Actioned by {interaction.user}")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="strike", description="Issue a strike to a user.")
@@ -266,15 +270,11 @@ class ModerationCog(commands.Cog):
         count = strikes.get(uid, {}).get("count", 0) + 1
         strikes[uid] = {"count": count, "username": str(user)}
         storage.save_strikes(strikes)
-
-        labels = {1: "Strike 1 ⚠️", 2: "Strike 2 ⚠️⚠️", 3: "Strike 3 ❌"}
-        label = labels.get(count, f"Strike {count}")
-
-        embed = discord.Embed(
-            title=f"⚠️ {label}",
-            description=f"{user.mention} has received **{label}**.",
-            color=discord.Color.orange() if count < 3 else discord.Color.red(),
-        )
+        strike_label = f"Strike {count}"
+        color = DANGER if count >= 3 else WARNING
+        embed = discord.Embed(title=strike_label, color=color)
+        embed.add_field(name="User", value=user.mention, inline=True)
+        embed.add_field(name="Total Strikes", value=str(count), inline=True)
         embed.set_footer(text=f"Issued by {interaction.user}")
         await interaction.response.send_message(embed=embed)
         await log_action(self.bot, f"Strike ({count})", interaction.user, user, f"Strike {count} issued")

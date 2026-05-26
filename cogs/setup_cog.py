@@ -3,11 +3,13 @@ from discord import app_commands
 from discord.ext import commands
 from utils import storage
 
+ACCENT = discord.Color.from_rgb(88, 101, 242)
+
 
 class AddMedalModal(discord.ui.Modal, title="Add Medal"):
     medal_name = discord.ui.TextInput(label="Medal Name", placeholder="e.g. Medal of Valor", max_length=64)
     medal_description = discord.ui.TextInput(label="Description", placeholder="What this medal is awarded for", style=discord.TextStyle.paragraph, max_length=256)
-    medal_emoji = discord.ui.TextInput(label="Emoji (optional)", placeholder="e.g. 🏅", required=False, max_length=8)
+    medal_emoji = discord.ui.TextInput(label="Icon (optional)", placeholder="e.g. Gold Star", required=False, max_length=8)
 
     async def on_submit(self, interaction: discord.Interaction):
         medals = storage.get_medals()
@@ -15,18 +17,18 @@ class AddMedalModal(discord.ui.Modal, title="Add Medal"):
         medals[key] = {
             "name": self.medal_name.value,
             "description": self.medal_description.value,
-            "emoji": self.medal_emoji.value or "🏅",
+            "emoji": self.medal_emoji.value or "—",
         }
         storage.save_medals(medals)
         await interaction.response.send_message(
-            f"✅ Medal **{self.medal_name.value}** has been added!", ephemeral=True
+            f"Medal **{self.medal_name.value}** has been added.", ephemeral=True
         )
 
 
 class RemoveMedalSelect(discord.ui.Select):
     def __init__(self, medals: dict):
         options = [
-            discord.SelectOption(label=v["name"], value=k, emoji=v.get("emoji", "🏅"))
+            discord.SelectOption(label=v["name"], value=k)
             for k, v in medals.items()
         ]
         super().__init__(placeholder="Select a medal to remove…", options=options[:25])
@@ -36,18 +38,46 @@ class RemoveMedalSelect(discord.ui.Select):
         removed = medals.pop(self.values[0], None)
         storage.save_medals(medals)
         name = removed["name"] if removed else self.values[0]
-        await interaction.response.send_message(f"🗑️ Medal **{name}** removed.", ephemeral=True)
+        await interaction.response.send_message(f"Medal **{name}** removed.", ephemeral=True)
+
+
+async def _set_channel_flow(interaction: discord.Interaction, label: str, key: str):
+    await interaction.response.send_message(
+        f"Mention the channel to use as the **{label}** channel.\nType `cancel` to skip.",
+        ephemeral=True,
+    )
+
+    def check(m):
+        return m.author == interaction.user and m.channel == interaction.channel
+
+    try:
+        msg = await interaction.client.wait_for("message", check=check, timeout=60)
+        if msg.content.lower() == "cancel":
+            await msg.delete()
+            return
+        if msg.channel_mentions:
+            ch = msg.channel_mentions[0]
+            cfg = storage.get_setup()
+            cfg[key] = ch.id
+            storage.save_setup(cfg)
+            await msg.delete()
+            await interaction.followup.send(f"{label} set to {ch.mention}.", ephemeral=True)
+        else:
+            await msg.delete()
+            await interaction.followup.send("No channel mentioned. Try again.", ephemeral=True)
+    except Exception:
+        pass
 
 
 class SetupView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=300)
 
-    @discord.ui.button(label="Add Medal", style=discord.ButtonStyle.primary, emoji="🏅")
+    @discord.ui.button(label="Add Medal", style=discord.ButtonStyle.primary)
     async def add_medal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(AddMedalModal())
 
-    @discord.ui.button(label="Remove Medal", style=discord.ButtonStyle.danger, emoji="🗑️")
+    @discord.ui.button(label="Remove Medal", style=discord.ButtonStyle.danger)
     async def remove_medal(self, interaction: discord.Interaction, button: discord.ui.Button):
         medals = storage.get_medals()
         if not medals:
@@ -57,165 +87,46 @@ class SetupView(discord.ui.View):
         view.add_item(RemoveMedalSelect(medals))
         await interaction.response.send_message("Select a medal to remove:", view=view, ephemeral=True)
 
-    @discord.ui.button(label="Set Mod Log Channel", style=discord.ButtonStyle.secondary, emoji="📋")
-    async def set_mod_log(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Mention the channel to use as the **Moderation Log** channel (e.g. #mod-logs).\nType `cancel` to skip.",
-            ephemeral=True
-        )
-
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        try:
-            msg = await interaction.client.wait_for("message", check=check, timeout=60)
-            if msg.content.lower() == "cancel":
-                await msg.delete()
-                return
-            if msg.channel_mentions:
-                ch = msg.channel_mentions[0]
-                cfg = storage.get_setup()
-                cfg["mod_log_channel"] = ch.id
-                storage.save_setup(cfg)
-                await msg.delete()
-                await interaction.followup.send(f"✅ Mod log channel set to {ch.mention}", ephemeral=True)
-            else:
-                await msg.delete()
-                await interaction.followup.send("No channel mentioned. Try again.", ephemeral=True)
-        except Exception:
-            pass
-
-    @discord.ui.button(label="Set Chat Log Channel", style=discord.ButtonStyle.secondary, emoji="💬")
-    async def set_chat_log(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Mention the channel to use as the **Chat Log** channel (e.g. #chat-logs).\nType `cancel` to skip.",
-            ephemeral=True
-        )
-
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        try:
-            msg = await interaction.client.wait_for("message", check=check, timeout=60)
-            if msg.content.lower() == "cancel":
-                await msg.delete()
-                return
-            if msg.channel_mentions:
-                ch = msg.channel_mentions[0]
-                cfg = storage.get_setup()
-                cfg["chat_log_channel"] = ch.id
-                storage.save_setup(cfg)
-                await msg.delete()
-                await interaction.followup.send(f"✅ Chat log channel set to {ch.mention}", ephemeral=True)
-            else:
-                await msg.delete()
-                await interaction.followup.send("No channel mentioned. Try again.", ephemeral=True)
-        except Exception:
-            pass
-
-    @discord.ui.button(label="Set Event Log Channel", style=discord.ButtonStyle.secondary, emoji="📅")
-    async def set_event_log(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Mention the channel to use as the **Event Log** channel (e.g. #event-logs).\nType `cancel` to skip.",
-            ephemeral=True
-        )
-
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        try:
-            msg = await interaction.client.wait_for("message", check=check, timeout=60)
-            if msg.content.lower() == "cancel":
-                await msg.delete()
-                return
-            if msg.channel_mentions:
-                ch = msg.channel_mentions[0]
-                cfg = storage.get_setup()
-                cfg["event_log_channel"] = ch.id
-                storage.save_setup(cfg)
-                await msg.delete()
-                await interaction.followup.send(f"✅ Event log channel set to {ch.mention}", ephemeral=True)
-            else:
-                await msg.delete()
-                await interaction.followup.send("No channel mentioned. Try again.", ephemeral=True)
-        except Exception:
-            pass
-
-    @discord.ui.button(label="Set CG Comms Channel", style=discord.ButtonStyle.secondary, emoji="📡")
-    async def set_cg_comms(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Mention the channel to use as the **CG Comms** channel (e.g. #cg-comms).\nType `cancel` to skip.",
-            ephemeral=True
-        )
-
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
-
-        try:
-            msg = await interaction.client.wait_for("message", check=check, timeout=60)
-            if msg.content.lower() == "cancel":
-                await msg.delete()
-                return
-            if msg.channel_mentions:
-                ch = msg.channel_mentions[0]
-                cfg = storage.get_setup()
-                cfg["cg_comms_channel"] = ch.id
-                storage.save_setup(cfg)
-                await msg.delete()
-                await interaction.followup.send(f"✅ CG Comms channel set to {ch.mention}", ephemeral=True)
-            else:
-                await msg.delete()
-                await interaction.followup.send("No channel mentioned. Try again.", ephemeral=True)
-        except Exception:
-            pass
-
-    @discord.ui.button(label="Set Welcome Channel", style=discord.ButtonStyle.secondary, emoji="👋")
+    @discord.ui.button(label="Welcome Channel", style=discord.ButtonStyle.secondary)
     async def set_welcome(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Mention the channel to use as the **Welcome** channel (e.g. #welcome).\nType `cancel` to skip.",
-            ephemeral=True
-        )
+        await _set_channel_flow(interaction, "Welcome", "welcome_channel")
 
-        def check(m):
-            return m.author == interaction.user and m.channel == interaction.channel
+    @discord.ui.button(label="Mod Log Channel", style=discord.ButtonStyle.secondary)
+    async def set_mod_log(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _set_channel_flow(interaction, "Moderation Log", "mod_log_channel")
 
-        try:
-            msg = await interaction.client.wait_for("message", check=check, timeout=60)
-            if msg.content.lower() == "cancel":
-                await msg.delete()
-                return
-            if msg.channel_mentions:
-                ch = msg.channel_mentions[0]
-                cfg = storage.get_setup()
-                cfg["welcome_channel"] = ch.id
-                storage.save_setup(cfg)
-                await msg.delete()
-                await interaction.followup.send(f"✅ Welcome channel set to {ch.mention}", ephemeral=True)
-            else:
-                await msg.delete()
-                await interaction.followup.send("No channel mentioned. Try again.", ephemeral=True)
-        except Exception:
-            pass
+    @discord.ui.button(label="Chat Log Channel", style=discord.ButtonStyle.secondary)
+    async def set_chat_log(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _set_channel_flow(interaction, "Chat Log", "chat_log_channel")
+
+    @discord.ui.button(label="Event Log Channel", style=discord.ButtonStyle.secondary)
+    async def set_event_log(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _set_channel_flow(interaction, "Event Log", "event_log_channel")
+
+    @discord.ui.button(label="CG Comms Channel", style=discord.ButtonStyle.secondary)
+    async def set_cg_comms(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await _set_channel_flow(interaction, "CG Comms", "cg_comms_channel")
 
 
 def build_setup_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
-    embed = discord.Embed(title="⚙️ Bot Setup", color=discord.Color.blurple())
+    embed = discord.Embed(title="Bot Configuration", color=ACCENT)
 
     def ch(key):
         cid = cfg.get(key)
         if cid:
             c = guild.get_channel(cid)
             return c.mention if c else f"<#{cid}>"
-        return "Not set"
+        return "Not configured"
 
-    embed.add_field(name="👋 Welcome Channel", value=ch("welcome_channel"), inline=True)
-    embed.add_field(name="📋 Mod Log Channel", value=ch("mod_log_channel"), inline=True)
-    embed.add_field(name="💬 Chat Log Channel", value=ch("chat_log_channel"), inline=True)
-    embed.add_field(name="📅 Event Log Channel", value=ch("event_log_channel"), inline=True)
-    embed.add_field(name="📡 CG Comms Channel", value=ch("cg_comms_channel"), inline=True)
+    embed.add_field(name="Welcome Channel", value=ch("welcome_channel"), inline=True)
+    embed.add_field(name="Mod Log Channel", value=ch("mod_log_channel"), inline=True)
+    embed.add_field(name="Chat Log Channel", value=ch("chat_log_channel"), inline=True)
+    embed.add_field(name="Event Log Channel", value=ch("event_log_channel"), inline=True)
+    embed.add_field(name="CG Comms Channel", value=ch("cg_comms_channel"), inline=True)
+
     medals = storage.get_medals()
-    medal_list = "\n".join(f"{v.get('emoji','🏅')} **{v['name']}** — {v['description']}" for v in medals.values()) or "None configured"
-    embed.add_field(name="🏅 Medals", value=medal_list[:1024], inline=False)
+    medal_list = "\n".join(f"**{v['name']}** — {v['description']}" for v in medals.values()) or "None configured"
+    embed.add_field(name="Medals", value=medal_list[:1024], inline=False)
     embed.set_footer(text="Use the buttons below to configure each section.")
     return embed
 
@@ -236,22 +147,19 @@ class SetupCog(commands.Cog):
     async def editsetup(self, interaction: discord.Interaction):
         cfg = storage.get_setup()
         embed = build_setup_embed(cfg, interaction.guild)
-        embed.title = "✏️ Edit Bot Setup"
+        embed.title = "Edit Configuration"
         await interaction.response.send_message(embed=embed, view=SetupView(), ephemeral=True)
 
     @app_commands.command(name="medals", description="View all available medals.")
     async def medals(self, interaction: discord.Interaction):
         medals = storage.get_medals()
         if not medals:
-            await interaction.response.send_message("No medals have been configured yet. Use `/setup` to add some.", ephemeral=True)
+            embed = discord.Embed(description="No medals have been configured yet. Use `/setup` to add some.", color=ACCENT)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        embed = discord.Embed(title="🏅 Available Medals", color=discord.Color.gold())
+        embed = discord.Embed(title="Medals", color=ACCENT)
         for v in medals.values():
-            embed.add_field(
-                name=f"{v.get('emoji', '🏅')} {v['name']}",
-                value=v["description"],
-                inline=False,
-            )
+            embed.add_field(name=v["name"], value=v["description"], inline=False)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="assignmedal", description="Assign a medal to a user.")
@@ -264,7 +172,7 @@ class SetupCog(commands.Cog):
             return
 
         options = [
-            discord.SelectOption(label=v["name"], value=k, emoji=v.get("emoji", "🏅"))
+            discord.SelectOption(label=v["name"], value=k)
             for k, v in medals.items()
         ]
 
@@ -283,9 +191,9 @@ class SetupCog(commands.Cog):
                 storage.save_awarded_medals(awarded)
 
                 embed = discord.Embed(
-                    title="🏅 Medal Awarded",
-                    description=f"{medal.get('emoji','🏅')} **{medal['name']}** has been awarded to {user.mention}!",
-                    color=discord.Color.gold(),
+                    title="Medal Awarded",
+                    description=f"**{medal['name']}** has been awarded to {user.mention}.",
+                    color=ACCENT,
                 )
                 embed.add_field(name="Reason", value=reason)
                 embed.add_field(name="Awarded by", value=inter.user.mention)
