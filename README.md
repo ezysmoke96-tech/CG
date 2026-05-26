@@ -9,49 +9,39 @@ A feature-rich Discord bot for Coruscant Guard operations.
 
 | Variable | Required | Description |
 |---|---|---|
-| `DISCORD_TOKEN` | ✅ | Your bot token from the Discord Developer Portal |
-| `GUILD_ID` | ✅ | Your Discord server ID (right-click server → Copy Server ID) |
-| `ROBLOX_COOKIE` | ✅ | Your `.ROBLOSECURITY` Roblox cookie |
-| `ROBLOX_MAIN_GROUP_ID` | ✅ | Numeric ID of your main Roblox group |
+| `DISCORD_TOKEN` | Yes | Your bot token from the Discord Developer Portal |
+| `GUILD_ID` | Yes | Your Discord server ID (right-click server → Copy Server ID) |
+| `ROBLOX_COOKIE` | Yes | Your `.ROBLOSECURITY` Roblox cookie |
+| `ROBLOX_MAIN_GROUP_ID` | Yes | Numeric ID of your main Roblox group |
 | `ROBLOX_ALLIED_GROUP_IDS` | Recommended | Comma-separated IDs of allied groups |
 | `ROBLOX_ENEMY_GROUP_IDS` | Recommended | Comma-separated IDs of enemy groups |
 
-3. Railway will auto-detect `railway.json` and use `python main.py` as the start command.
-4. Make sure the service type is set to **Worker** (not Web Service) in Railway.
-5. Deploy!
+3. Railway auto-detects `railway.json` and runs `python main.py`.
+4. Set the service type to **Worker** (not Web Service) in Railway settings.
+5. Deploy.
 
 ## First Run
 
-After the bot comes online, use `/setup` in your server (Administrator only) to configure:
-- Welcome channel (for the join message)
-- Moderation Log, Chat Log, Event Log, and CG Comms channels
+After the bot is online, use `/setup` (Administrator only) to configure:
+- Welcome channel
+- Moderation Log, Chat Log, Event Log, CG Comms channels
 - Medals
 
-## Commands
+## Background Check Requirements
 
-| Command | Description |
+`/bgcheck` automatically evaluates users against these minimums:
+
+| Requirement | Minimum |
 |---|---|
-| `/ping` | Check bot latency |
-| `/help` | Show all commands |
-| `/setup` | Configure the bot |
-| `/editsetup` | Edit configuration |
-| `/medals` | View all medals |
-| `/assignmedal` | Award a medal |
-| `/host` | Log an event |
-| `/aos` | Place AOS in CG Comms |
-| `/groupsync` | Sync Roblox group rank |
-| `/rankcheck` | Check Roblox rank |
-| `/bgcheck` | Full Roblox background check (main group + allies + enemies) |
-| `/strike` | Issue a strike |
-| `/purge` `/kick` `/ban` `/mute` | Moderation |
-| `/blacklist` `/unblacklist` | Blacklist management |
-| `/announce` `/lockdown` `/unlockdown` | Server management |
-| `/roll` `/coinflip` `/8ball` `/rate` `/ship` | Fun |
-| `/roast` `/compliment` `/meme` `/joke` `/choose` | More fun |
-| `/order66` `/hellothere` `/rogerroger` + more | Star Wars memes |
+| Badges | 175 |
+| Friends | 20 |
+| Following | 10 |
+| Account Age | 365 days |
+
+A user must meet **all** requirements to receive a PASS verdict.
 
 ## Notes
 
-- Data (medals, strikes, AOS, etc.) is stored in local JSON files inside the container.
-  On Railway, this resets on each redeploy. Add a Railway PostgreSQL add-on if you need persistent data.
-- The welcome message fires automatically when a new member joins the channel set via `/setup`.
+- Data is stored in local JSON files. It resets on Railway redeploys.
+  Add a Railway PostgreSQL add-on for persistent storage.
+- For two servers: leave `GUILD_ID` blank so commands sync globally to all servers.
