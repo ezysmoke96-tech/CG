@@ -15,10 +15,10 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-MIN_BADGES   = 175
-MIN_FRIENDS  = 20
+MIN_BADGES    = 175
+MIN_FRIENDS   = 20
 MIN_FOLLOWING = 10
-MIN_AGE_DAYS = 365
+MIN_AGE_DAYS  = 365
 
 
 async def roblox_get(session: aiohttp.ClientSession, url: str) -> dict:
@@ -98,15 +98,6 @@ async def get_group_name(session, group_id: str) -> str:
         return f"Group {group_id}"
 
 
-def status(passed: bool) -> str:
-    return "PASS" if passed else "FAIL"
-
-
-def check_line(label: str, value, minimum, passed: bool) -> str:
-    mark = "[PASS]" if passed else "[FAIL]"
-    return f"{mark}  {label}: {value}  (min: {minimum})"
-
-
 class RobloxCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -129,142 +120,104 @@ class RobloxCog(commands.Cog):
 
             user_id = user_data["id"]
 
-            info, groups, badges, friends, followers, following, gamepasses = (
-                await get_user_info(session, user_id),
-                await get_user_groups(session, user_id),
-                await get_badge_count(session, user_id),
-                await get_friends_count(session, user_id),
-                await get_followers_count(session, user_id),
-                await get_following_count(session, user_id),
-                await get_gamepass_count(session, user_id),
+            info       = await get_user_info(session, user_id)
+            groups     = await get_user_groups(session, user_id)
+            badges     = await get_badge_count(session, user_id)
+            friends    = await get_friends_count(session, user_id)
+            followers  = await get_followers_count(session, user_id)
+            following  = await get_following_count(session, user_id)
+            gamepasses = await get_gamepass_count(session, user_id)
+
+            user_group_map = {str(g["group"]["id"]): g for g in groups}
+
+            created_raw = info.get("created", "")
+            if created_raw:
+                created_dt = datetime.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+                age_days   = (datetime.datetime.now(datetime.timezone.utc) - created_dt).days
+                created_str = created_dt.strftime("%B %d, %Y")
+                age_str     = f"{age_days} days"
+            else:
+                age_days    = 0
+                created_str = "Unknown"
+                age_str     = "Unknown"
+
+            banned       = info.get("isBanned", False)
+            username     = info.get("name", roblox_user)
+            display_name = info.get("displayName", roblox_user)
+            description  = info.get("description", "").strip() or "None"
+
+            pass_badges   = badges    >= MIN_BADGES
+            pass_friends  = friends   >= MIN_FRIENDS
+            pass_following = following >= MIN_FOLLOWING
+            pass_age      = age_days  >= MIN_AGE_DAYS
+            pass_banned   = not banned
+
+            overall_pass = all([pass_badges, pass_friends, pass_following, pass_age, pass_banned])
+            color = discord.Color.from_rgb(40, 167, 69) if overall_pass else discord.Color.from_rgb(220, 53, 69)
+
+            embed = discord.Embed(
+                title=f"Background Check — {username}",
+                url=f"https://www.roblox.com/users/{user_id}/profile",
+                color=color,
+                timestamp=datetime.datetime.utcnow(),
             )
 
-        user_group_map = {str(g["group"]["id"]): g for g in groups}
+            embed.add_field(
+                name="Profile",
+                value=(
+                    f"**Username:** {username}\n"
+                    f"**Display Name:** {display_name}\n"
+                    f"**User ID:** {user_id}\n"
+                    f"**Banned:** {'Yes' if banned else 'No'}\n"
+                    f"**Description:** {description[:200]}"
+                ),
+                inline=False,
+            )
 
-        created_raw = info.get("created", "")
-        if created_raw:
-            created_dt = datetime.datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
-            age_days = (datetime.datetime.now(datetime.timezone.utc) - created_dt).days
-            created_str = created_dt.strftime("%B %d, %Y")
-            age_str = f"{age_days} days"
-        else:
-            age_days = 0
-            created_str = "Unknown"
-            age_str = "Unknown"
+            stats = "\n".join([
+                f"Badges: **{badges}**",
+                f"Friends: **{friends}**",
+                f"Followers: **{followers}**",
+                f"Following: **{following}**",
+                f"Gamepasses Owned: **{gamepasses}**",
+                f"Account Age: **{age_str}**",
+                f"Account Created: **{created_str}**",
+                f"Total Groups: **{len(groups)}**",
+            ])
+            embed.add_field(name="Statistics", value=stats, inline=False)
 
-        banned = info.get("isBanned", False)
-        username = info.get("name", roblox_user)
-        display_name = info.get("displayName", roblox_user)
-        description = info.get("description", "").strip() or "None"
+            # Main group
+            if MAIN_GROUP_ID and MAIN_GROUP_ID in user_group_map:
+                g = user_group_map[MAIN_GROUP_ID]
+                main_value = f"**{g['group']['name']}** — {g['role']['name']}"
+            else:
+                main_value = "-"
+            embed.add_field(name="Main Group", value=main_value, inline=False)
 
-        pass_badges   = badges   >= MIN_BADGES
-        pass_friends  = friends  >= MIN_FRIENDS
-        pass_following = following >= MIN_FOLLOWING
-        pass_age      = age_days >= MIN_AGE_DAYS
-        pass_banned   = not banned
+            # Allied groups — only show ones the user is actually in
+            if ALLIED_GROUP_IDS:
+                ally_lines = []
+                for gid in ALLIED_GROUP_IDS:
+                    if gid in user_group_map:
+                        g = user_group_map[gid]
+                        ally_lines.append(f"**{g['group']['name']}** — {g['role']['name']}")
+                ally_value = "\n".join(ally_lines) if ally_lines else "-"
+                embed.add_field(name="Divisional Groups", value=ally_value, inline=False)
 
-        overall_pass = all([pass_badges, pass_friends, pass_following, pass_age, pass_banned])
+            # Enemy groups — only flag ones the user is actually in
+            if ENEMY_GROUP_IDS:
+                enemy_lines = []
+                for gid in ENEMY_GROUP_IDS:
+                    if gid in user_group_map:
+                        g = user_group_map[gid]
+                        enemy_lines.append(f"**{g['group']['name']}** — {g['role']['name']}")
+                if enemy_lines:
+                    embed.add_field(name="Enemy Groups Detected", value="\n".join(enemy_lines), inline=False)
 
-        color = discord.Color.from_rgb(40, 167, 69) if overall_pass else discord.Color.from_rgb(220, 53, 69)
-
-        embed = discord.Embed(
-            title=f"Background Check — {username}",
-            url=f"https://www.roblox.com/users/{user_id}/profile",
-            color=color,
-            timestamp=datetime.datetime.utcnow(),
-        )
-
-        embed.add_field(
-            name="Profile",
-            value=(
-                f"**Username:** {username}\n"
-                f"**Display Name:** {display_name}\n"
-                f"**User ID:** {user_id}\n"
-                f"**Banned:** {'Yes' if banned else 'No'}\n"
-                f"**Description:** {description[:200]}"
-            ),
-            inline=False,
-        )
-
-        stats_lines = [
-            check_line("Badges",    badges,    f"{MIN_BADGES}+",    pass_badges),
-            check_line("Friends",   friends,   f"{MIN_FRIENDS}+",   pass_friends),
-            check_line("Following", following, f"{MIN_FOLLOWING}+", pass_following),
-            check_line("Account Age", age_str, f"{MIN_AGE_DAYS}+ days", pass_age),
-        ]
-        stats_lines += [
-            f"         Followers: {followers}",
-            f"         Gamepasses Owned: {gamepasses}",
-            f"         Account Created: {created_str}",
-            f"         Total Groups: {len(groups)}",
-        ]
-
-        embed.add_field(
-            name="Statistics",
-            value="```\n" + "\n".join(stats_lines) + "\n```",
-            inline=False,
-        )
-
-        async with aiohttp.ClientSession() as session:
-            if MAIN_GROUP_ID:
-                if MAIN_GROUP_ID in user_group_map:
-                    g = user_group_map[MAIN_GROUP_ID]
-                    main_rank = f"{g['group']['name']} — {g['role']['name']}"
-                else:
-                    gname = await get_group_name(session, MAIN_GROUP_ID)
-                    main_rank = f"{gname} — Not a member"
-                embed.add_field(name="Main Group", value=main_rank, inline=False)
-
-            ally_lines = []
-            for gid in ALLIED_GROUP_IDS:
-                if gid in user_group_map:
-                    g = user_group_map[gid]
-                    ally_lines.append(f"[IN]  {g['group']['name']} — {g['role']['name']}")
-                else:
-                    gname = await get_group_name(session, gid)
-                    ally_lines.append(f"[OUT] {gname} — Not a member")
-            if ally_lines:
-                embed.add_field(
-                    name="Allied Groups",
-                    value="```\n" + "\n".join(ally_lines) + "\n```",
-                    inline=False,
-                )
-
-            enemy_lines = []
-            for gid in ENEMY_GROUP_IDS:
-                if gid in user_group_map:
-                    g = user_group_map[gid]
-                    enemy_lines.append(f"[DETECTED]  {g['group']['name']} — {g['role']['name']}")
-                else:
-                    gname = await get_group_name(session, gid)
-                    enemy_lines.append(f"[CLEAR]     {gname} — Not a member")
-            if enemy_lines:
-                embed.add_field(
-                    name="Enemy Groups",
-                    value="```\n" + "\n".join(enemy_lines) + "\n```",
-                    inline=False,
-                )
-
-        verdict_text = "PASSED" if overall_pass else "FAILED"
-        if not overall_pass:
-            failed = []
-            if not pass_badges:   failed.append(f"Badges: {badges} (need {MIN_BADGES}+)")
-            if not pass_friends:  failed.append(f"Friends: {friends} (need {MIN_FRIENDS}+)")
-            if not pass_following: failed.append(f"Following: {following} (need {MIN_FOLLOWING}+)")
-            if not pass_age:      failed.append(f"Account Age: {age_days} days (need {MIN_AGE_DAYS}+)")
-            if not pass_banned:   failed.append("Account is banned")
-            verdict_detail = "\n".join(f"- {f}" for f in failed)
-        else:
-            verdict_detail = "All requirements met."
-
-        embed.add_field(
-            name=f"Verdict — {verdict_text}",
-            value=verdict_detail,
-            inline=False,
-        )
-
-        embed.set_footer(text=f"Requested by {interaction.user}")
-        await interaction.followup.send(embed=embed)
+            verdict_text = "PASSED" if overall_pass else "FAILED"
+            embed.add_field(name="Verdict", value=verdict_text, inline=False)
+            embed.set_footer(text=f"Requested by {interaction.user}")
+            await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):
